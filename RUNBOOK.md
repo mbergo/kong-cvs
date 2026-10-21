@@ -55,3 +55,10 @@ Import the official Kong dashboard (grafana.com ID 7424) and add an AI panel set
 Authtoken: `ngrok config add-authtoken <token>` (dashboard.ngrok.com → Your Authtoken).
 Public URL from `curl -s 127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url'`.
 MCP (Streamable HTTP) endpoint = `<public_url>/<route path with AI MCP Proxy>`, e.g. `/mcp`.
+
+### 01c — TLS verify for plugins (2026-10-21, TEST ONLY)
+Symptom: Konnect shows the node "Out of sync" / "Sync deltas parse failure (error code 21)";
+`make logs` shows `ssl_verify invalid value: global tls_certificate_verify option is enabled`.
+A plugin with `ssl_verify: false` makes the DP reject the whole config. For test, `config.env`
+sets `KONG_TLS_CERTIFICATE_VERIFY=off` (script default is `on`); then `make up`.
+In prod keep `on` and turn `ssl_verify` back on in the plugin instead.
