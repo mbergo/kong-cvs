@@ -10,8 +10,8 @@ g() { curl -fsS -H "Authorization: Bearer $GRAFANA_API_TOKEN" -H 'Content-Type: 
 folder=$(g "$GRAFANA_URL/api/folders" | jq -r '.[] | select(.title=="Kong") | .uid')
 [ -n "$folder" ] || folder=$(g -X POST "$GRAFANA_URL/api/folders" -d '{"title":"Kong"}' | jq -r .uid)
 
-for f in dashboards/kong.json dashboards/kong-public.json; do
-  jq -n --slurpfile d "$f" --arg folder "$folder" '{dashboard: ($d[0] | del(.id)), folderUid: $folder, overwrite: true}' \
+for f in dashboards/kong-command-center.json dashboards/kong.json dashboards/kong-public.json; do
+  sed "s/\${DS_PROMETHEUS}/grafanacloud-prom/g" "$f" | jq --arg folder "$folder" '{dashboard: (del(.id, .__inputs, .__requires)), folderUid: $folder, overwrite: true}' \
     | g -X POST "$GRAFANA_URL/api/dashboards/db" -d @- | jq -r '"  \(.url)"'
 done
 
@@ -22,7 +22,7 @@ curl -fsSL https://grafana.com/api/dashboards/7424/revisions/latest/download \
   | g -X POST "$GRAFANA_URL/api/dashboards/import" -d @- | jq -r '"  \(.importedUrl // .url)"'
 
 # Public link for the executive dashboard
-uid=kong-exec-public
+uid=kong-command-center
 pub=$(g "$GRAFANA_URL/api/dashboards/uid/$uid/public-dashboards" 2>/dev/null | jq -r '.accessToken // empty' || true)
 [ -n "$pub" ] || pub=$(g -X POST "$GRAFANA_URL/api/dashboards/uid/$uid/public-dashboards" \
   -d '{"isEnabled":true,"share":"public","timeSelectionEnabled":true}' | jq -r .accessToken)
