@@ -91,7 +91,8 @@ Token: Grafana Cloud → Connections → OpenTelemetry (OTLP) → Minimal setup 
 ### 08 — Serverless gateway: route + key auth (2026-10-21)
 Control plane `serverless-api-gateway-demo`, proxy `https://3fb7c42224.us.serverless.gateways.konggateway.com`.
 - Gateway service **Kong-Bro** → upstream `httpbin.org`; route path `/test` (methods and hosts empty).
-- Central consumer **bro** (API Gateway → Consumers) with a Key Auth credential (stored in `secrets/tester.env`).
+- Consumer **bro**: first created as a central consumer in the UI; now also a CP consumer with `KEY_BRO`
+  (`secrets/demo-consumers.env`), managed by decK in `kong/kong-cloud.yaml`.
 - Plugin **Key Authentication** scoped to Kong-Bro: key names `apikey`, key in header (+query), auth by
   **Centrally managed consumers**, realms `Current control plane` + `bro`.
 - Check: no key → 401; `-H "apikey: $KONG_TESTER_APIKEY"` → 200 with `X-Consumer-Username: bro`.
@@ -106,8 +107,9 @@ Control plane `serverless-api-gateway-demo`, proxy `https://3fb7c42224.us.server
 
 ### 10 — Synthetic traffic generator (2026-10-21)
 `make traffic` runs `scripts/10-traffic-gen.sh` in a `curlimages/curl` container (restart unless-stopped):
-GET/POST/PUT/DELETE, 2xx/4xx/5xx, `/delay` latency, `/bytes` payloads and unauthenticated calls,
-~2 req/s with a burst every ~10 min. Needs `secrets/tester.env`. Stop with `make traffic-stop`.
+7 routes × 5 consumers + anonymous, GET/POST/PUT/DELETE, 2xx/4xx/5xx, `/delay` latency, `/bytes` payloads,
+~3 req/s with a `/search` burst every ~10 min (trips the rate limit). Needs `secrets/demo-consumers.env` and
+`KONG_SERVERLESS_URL` in `secrets/tester.env`. Stop with `make traffic-stop`.
 
 ### 09b — Executive dashboard
 `dashboards/kong.json` (uid `kong-exec`) uses the Kong OTel metric names as Prometheus sees them

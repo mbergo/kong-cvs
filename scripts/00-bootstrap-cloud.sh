@@ -10,11 +10,11 @@ source config.env; source secrets/konnect.env; source secrets/grafana-otlp.env
 
 # 1. consumer API keys (generated once, kept in secrets/)
 touch secrets/demo-consumers.env; chmod 600 secrets/demo-consumers.env
-for c in MOBILE_APP WEB_APP PARTNER_ACME INTERNAL_BATCH; do
+for c in BRO MOBILE_APP WEB_APP PARTNER_ACME INTERNAL_BATCH; do
   grep -q "^KEY_$c=" secrets/demo-consumers.env || echo "KEY_$c=demo-$(openssl rand -hex 16)" >> secrets/demo-consumers.env
 done
 source secrets/demo-consumers.env
-export DECK_OTLP_AUTH="$GRAFANA_OTLP_AUTH_HEADER" DECK_KEY_MOBILE_APP="$KEY_MOBILE_APP" DECK_KEY_WEB_APP="$KEY_WEB_APP" \
+export DECK_OTLP_AUTH="$GRAFANA_OTLP_AUTH_HEADER" DECK_KEY_BRO="$KEY_BRO" DECK_KEY_MOBILE_APP="$KEY_MOBILE_APP" DECK_KEY_WEB_APP="$KEY_WEB_APP" \
        DECK_KEY_PARTNER_ACME="$KEY_PARTNER_ACME" DECK_KEY_INTERNAL_BATCH="$KEY_INTERNAL_BATCH"
 
 # 2. apply the declarative config
@@ -28,7 +28,7 @@ PROXY="${KONG_SERVERLESS_URL:-https://3fb7c42224.us.serverless.gateways.konggate
 grep -q '^KONG_SERVERLESS_URL=' secrets/tester.env 2>/dev/null || echo "KONG_SERVERLESS_URL=$PROXY" >> secrets/tester.env
 echo "control plane $CP, proxy $PROXY"
 sleep 10
-for r in orders payments users catalog search legacy; do
+for r in test orders payments users catalog search legacy; do
   printf '  /%-9s no key %s | key %s\n' "$r" "$(curl -s -o /dev/null -w '%{http_code}' "$PROXY/$r/get")" \
     "$(curl -s -o /dev/null -w '%{http_code}' -H "apikey: $KEY_WEB_APP" "$PROXY/$r/get")"
 done

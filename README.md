@@ -35,7 +35,7 @@ mkdir -p secrets && chmod 700 secrets   # secrets/ fica fora do git
 ### 2. Control plane serverless no Konnect
 
 1. Konnect → **API Gateway → Control planes → New** → **Serverless**. Nome: `serverless-api-gateway-demo`.
-2. Anote a **Proxy URL** (ex.: `https://3fb7c42224.us.serverless.gateways.konggateway.com`).
+2. Anote a **Proxy URL**: aparece no Overview do control plane e na página de qualquer Gateway service (ex.: `https://3fb7c42224.us.serverless.gateways.konggateway.com`).
 3. Avatar → **Personal Access Tokens → Generate token** (na mesma organização do control plane):
 
 ```bash
@@ -69,16 +69,16 @@ O que é criado (`kong/kong-cloud.yaml`):
 | Item | Detalhe |
 |---|---|
 | Plugin global **OpenTelemetry** | traces, logs e métricas (incluindo AI) → Grafana Cloud |
-| 7 APIs | `/test` (Kong-Bro), `/orders`, `/payments`, `/users`, `/catalog`, `/search`, `/legacy` |
+| 7 APIs | `/test` (service `Kong-Bro`, route `bro-test`), `/orders`, `/payments`, `/users`, `/catalog`, `/search`, `/legacy` |
 | Key auth | em todas as APIs (header `apikey`) |
 | Rate limiting | `/search`: 40 req/min, gera 429 |
 | Request termination | `/legacy`: sempre 503 |
-| 5 consumers | `bro`, `web-app`, `mobile-app`, `partner-acme`, `internal-batch`; chaves geradas em `secrets/demo-consumers.env` |
+| 5 consumers | `bro`, `web-app`, `mobile-app`, `partner-acme`, `internal-batch`; chaves geradas em `secrets/demo-consumers.env` (`KEY_BRO`, `KEY_WEB_APP`, …) |
 
 Teste manual:
 
 ```bash
-source secrets/tester.env secrets/demo-consumers.env
+source secrets/tester.env; source secrets/demo-consumers.env
 curl -i "$KONG_SERVERLESS_URL/orders/get"                          # 401
 curl -i -H "apikey: $KEY_WEB_APP" "$KONG_SERVERLESS_URL/orders/get"  # 200
 ```

@@ -52,7 +52,7 @@ alloy-logs: ## Follow Alloy logs
 
 traffic: ## Step 10: start continuous mixed traffic against the Kong Cloud route
 	-$(DOCKER) rm -f kong-traffic >/dev/null 2>&1
-	$(DOCKER) run -d --name kong-traffic --restart unless-stopped --env-file secrets/tester.env --env-file secrets/demo-consumers.env \
+	$(DOCKER) run -d --name kong-traffic --restart unless-stopped --env-file secrets/demo-consumers.env -e KONG_SERVERLESS_URL=$$(grep ^KONG_SERVERLESS_URL= secrets/tester.env | cut -d= -f2-) \
 	  -v $(CURDIR)/scripts/10-traffic-gen.sh:/gen.sh:ro --entrypoint sh curlimages/curl /gen.sh
 
 traffic-stop: ## Stop the traffic generator
@@ -66,7 +66,7 @@ cloud: ## From zero: decK sync kong/kong-cloud.yaml to Kong Cloud + smoke test +
 
 cloud-diff: ## Show what decK would change in Kong Cloud
 	@set -a; . secrets/konnect.env; . secrets/grafana-otlp.env; . secrets/demo-consumers.env; set +a; \
-	DECK_OTLP_AUTH="$$GRAFANA_OTLP_AUTH_HEADER" DECK_KEY_MOBILE_APP="$$KEY_MOBILE_APP" DECK_KEY_WEB_APP="$$KEY_WEB_APP" \
+	DECK_OTLP_AUTH="$$GRAFANA_OTLP_AUTH_HEADER" DECK_KEY_BRO="$$KEY_BRO" DECK_KEY_MOBILE_APP="$$KEY_MOBILE_APP" DECK_KEY_WEB_APP="$$KEY_WEB_APP" \
 	DECK_KEY_PARTNER_ACME="$$KEY_PARTNER_ACME" DECK_KEY_INTERNAL_BATCH="$$KEY_INTERNAL_BATCH" \
 	deck gateway diff --konnect-token "$$KONNECT_TOKEN" --konnect-addr $(KONNECT_API) kong/kong-cloud.yaml
 

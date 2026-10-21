@@ -14,10 +14,10 @@ while :; do
   elif [ $w -lt 12 ]; then K="$KEY_MOBILE_APP"
   elif [ $w -lt 15 ]; then K="$KEY_PARTNER_ACME"
   elif [ $w -lt 17 ]; then K="$KEY_INTERNAL_BATCH"
-  elif [ $w -lt 19 ]; then K="$KONG_TESTER_APIKEY"
+  elif [ $w -lt 19 ]; then K="$KEY_BRO"
   else K=""; fi
   route=$(pick orders orders orders payments payments users catalog catalog search search legacy)
-  [ "$K" = "$KONG_TESTER_APIKEY" ] && route=test
+  [ "$K" = "$KEY_BRO" ] && route=test
   if   [ $p -lt 45 ]; then call GET  "/$route/get" "$K"
   elif [ $p -lt 60 ]; then call POST "/$route/post" "$K"
   elif [ $p -lt 65 ]; then call PUT  "/$route/put" "$K"
