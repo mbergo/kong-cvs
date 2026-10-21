@@ -137,6 +137,12 @@ No dashboard: **Share → Share externally → Public dashboard** → copie o li
 Métricas usadas (OTel do Kong, como o Prometheus do Grafana Cloud as nomeia):
 `http_server_request_count_total`, `kong_latency_{total,upstream,internal}_seconds_bucket`, `http_server_{request,response}_size_bytes_sum`; labels `http_response_status_code`, `http_request_method`, `kong_route_name`, `kong_service_name`, `kong_auth_consumer_name`, `job="kong"`.
 
+## Outros destinos
+
+- [`docs/GRAFANA-CLOUD.md`](docs/GRAFANA-CLOUD.md): passo a passo do que fizemos, as pegadinhas e o **checklist do que falta**
+- [`docs/SPLUNK.md`](docs/SPLUNK.md): HTTP Log → HEC, OTel → Observability Cloud, Collector, dashboard em SPL
+- [`docs/LOOKER-STUDIO.md`](docs/LOOKER-STUDIO.md): BigQuery, Google Sheets (hack) e agregados do Konnect, mais os componentes do relatório
+
 ## Data plane self-hosted (opcional)
 
 Para rodar um data plane próprio (ex.: o AI Gateway `ai-gw-kong`) e coletar `:8100/metrics` com o Grafana Alloy, veja o [`RUNBOOK.md`](RUNBOOK.md), passos 01–06 (`make up`, `make alloy-up`).
