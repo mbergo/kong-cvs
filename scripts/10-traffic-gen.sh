@@ -1,27 +1,34 @@
 #!/bin/sh
-# Step 10: mixed synthetic traffic for the Kong Cloud demo route (/test -> httpbin).
-# Methods, status codes, latency (/delay), payload sizes (/bytes) and unauthenticated calls,
-# ~2 req/s with a short burst every ~10 min. Runs forever (see `make traffic`).
-U="${KONG_SERVERLESS_URL:?}/test"; K="${KONG_TESTER_APIKEY:?}"
-req()  { curl -s -o /dev/null -m 15 -X "$1" -H "apikey: $K" "$U$2"; }
-anon() { curl -s -o /dev/null -m 15 "$U$1"; }
+# Step 10: varied synthetic traffic for Kong Cloud — 7 routes, 5 consumers, anonymous calls,
+# methods, status codes, /delay latency, /bytes payloads, rate-limit bursts. Runs forever (`make traffic`).
+P="${KONG_SERVERLESS_URL:?}"
+rnd() { od -An -N2 -tu2 /dev/urandom | tr -d ' '; }
+pick() { n=$#; i=$(( $(rnd) % n + 1 )); eval echo "\${$i}"; }
+call() { curl -s -o /dev/null -m 15 -X "$1" ${3:+-H "apikey: $3"} "$P$2"; }
 i=0
 while :; do
-  i=$((i+1))
-  r=$(od -An -N2 -tu2 /dev/urandom | tr -d ' ')
-  p=$((r % 100))
-  if   [ $p -lt 40 ]; then req GET /get
-  elif [ $p -lt 50 ]; then req POST /post
-  elif [ $p -lt 55 ]; then req PUT /put
-  elif [ $p -lt 58 ]; then req DELETE /delete
-  elif [ $p -lt 66 ]; then req GET "/delay/$((r % 3))"
-  elif [ $p -lt 72 ]; then req GET "/bytes/$(( (r % 50 + 1) * 1024 ))"
-  elif [ $p -lt 77 ]; then req GET /status/404
-  elif [ $p -lt 80 ]; then req GET /status/429
-  elif [ $p -lt 83 ]; then req GET /status/500
-  elif [ $p -lt 85 ]; then req GET /status/503
-  elif [ $p -lt 92 ]; then anon /get
-  else req POST /status/201
-  fi
-  if [ $((i % 1200)) -lt 60 ]; then sleep 0.1; else sleep 0.5; fi
+  i=$((i+1)); r=$(rnd); p=$((r % 100))
+  # consumer mix (weighted): web-app > mobile-app > partner > batch > bro > anonymous
+  w=$((r % 20))
+  if   [ $w -lt 7 ];  then K="$KEY_WEB_APP"
+  elif [ $w -lt 12 ]; then K="$KEY_MOBILE_APP"
+  elif [ $w -lt 15 ]; then K="$KEY_PARTNER_ACME"
+  elif [ $w -lt 17 ]; then K="$KEY_INTERNAL_BATCH"
+  elif [ $w -lt 19 ]; then K="$KONG_TESTER_APIKEY"
+  else K=""; fi
+  route=$(pick orders orders orders payments payments users catalog catalog search search legacy)
+  [ "$K" = "$KONG_TESTER_APIKEY" ] && route=test
+  if   [ $p -lt 45 ]; then call GET  "/$route/get" "$K"
+  elif [ $p -lt 60 ]; then call POST "/$route/post" "$K"
+  elif [ $p -lt 65 ]; then call PUT  "/$route/put" "$K"
+  elif [ $p -lt 68 ]; then call DELETE "/$route/delete" "$K"
+  elif [ $p -lt 76 ]; then call GET  "/$route/delay/$((r % 4))" "$K"
+  elif [ $p -lt 82 ]; then call GET  "/$route/bytes/$(( (r % 80 + 1) * 1024 ))" "$K"
+  elif [ $p -lt 87 ]; then call GET  "/$route/status/404" "$K"
+  elif [ $p -lt 90 ]; then call GET  "/$route/status/500" "$K"
+  elif [ $p -lt 92 ]; then call GET  "/$route/status/502" "$K"
+  elif [ $p -lt 95 ]; then call GET  "/$route/status/400" "$K"
+  else call POST "/$route/status/201" "$K"; fi
+  # burst on /search every ~10 min to trip the rate limit
+  if [ $((i % 1200)) -lt 80 ]; then call GET /search/get "$KEY_PARTNER_ACME" & sleep 0.05; else sleep 0.3; fi
 done

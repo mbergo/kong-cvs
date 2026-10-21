@@ -119,3 +119,11 @@ Rows: executive KPIs, traffic & reliability, who/what, AI, and collapsed traces/
 Grafana public dashboards don't support template variables, so `dashboards/kong-public.json` is the same
 dashboard with variables resolved (Grafana Cloud default data source UIDs `grafanacloud-prom|traces|logs`,
 gateway `kong`, all consumers). Import it, then **Share → Share externally → Public dashboard** → copy link.
+
+## From zero (Kong Cloud + Grafana Cloud), all CLI
+1. `secrets/konnect.env` (KONNECT_TOKEN=kpat_…, org with the serverless CP),
+   `secrets/grafana-otlp.env` (GRAFANA_OTLP_AUTH_HEADER), `secrets/grafana-api.env` (GRAFANA_URL, GRAFANA_API_TOKEN).
+2. `make cloud` → decK sync `kong/kong-cloud.yaml` (OTel global, 7 APIs, key-auth, rate limit, 503 legacy,
+   5 consumers; keys generated into `secrets/demo-consumers.env`), smoke test, starts `make traffic`.
+3. `make dashboards` → Grafana folder "Kong": executive dashboard, public variant (+ public link), official 7424.
+`make cloud-diff` shows drift between Kong Cloud and the file.

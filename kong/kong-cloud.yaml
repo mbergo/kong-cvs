@@ -1,0 +1,95 @@
+# Kong Cloud (Konnect serverless control plane) — full desired state, applied with decK.
+# Secrets come from env (DECK_*), loaded by scripts/00-bootstrap-cloud.sh from secrets/.
+_format_version: "3.0"
+_konnect:
+  control_plane_name: serverless-api-gateway-demo
+
+plugins:
+  # Global: traces, logs and metrics → Grafana Cloud OTLP gateway
+  - name: opentelemetry
+    instance_name: grafana-otlp
+    enabled: true
+    protocols: [grpc, grpcs, http, https]
+    config:
+      traces_endpoint: https://otlp-gateway-prod-us-east-3.grafana.net/otlp/v1/traces
+      logs_endpoint: https://otlp-gateway-prod-us-east-3.grafana.net/otlp/v1/logs
+      access_logs:
+        endpoint: https://otlp-gateway-prod-us-east-3.grafana.net/otlp/v1/logs
+      headers:
+        Authorization: ${{ env "DECK_OTLP_AUTH" }}
+      metrics:
+        endpoint: https://otlp-gateway-prod-us-east-3.grafana.net/otlp/v1/metrics
+        push_interval: 15
+        enable_request_metrics: true
+        enable_bandwidth_metrics: true
+        enable_latency_metrics: true
+        enable_upstream_health_metrics: true
+        enable_consumer_attribute: true
+        enable_principal_attribute: true
+        enable_ai_metrics: true
+      header_type: preserve
+      sampling_strategy: parent_drop_probability_fallback
+
+services:
+  # The first demo API (built in the UI as "Kong-Bro"), auth by the central consumer "bro" + CP consumers
+  - name: Kong-Bro
+    url: https://httpbin.org
+    routes:
+      - name: bro-test
+        paths: [/test]
+        protocols: [https]
+        strip_path: true
+        plugins:
+          - name: key-auth
+            config:
+              key_names: [apikey]
+              key_in_header: true
+              key_in_query: true
+              key_in_body: false
+              identity_realms:
+                - scope: cp
+                - scope: realm
+                  id: 8a967b51-3e7e-42fd-ad0f-f8c21e8e2415
+                  region: us
+
+  # Extra demo APIs for varied dashboards (all httpbin upstreams, key-auth with CP consumers)
+  - name: orders-api
+    url: https://httpbin.org
+    routes: [{ name: orders, paths: [/orders], protocols: [https] }]
+    plugins: [{ name: key-auth, config: { key_names: [apikey] } }]
+  - name: payments-api
+    url: https://httpbin.org
+    routes: [{ name: payments, paths: [/payments], protocols: [https] }]
+    plugins: [{ name: key-auth, config: { key_names: [apikey] } }]
+  - name: users-api
+    url: https://httpbin.org
+    routes: [{ name: users, paths: [/users], protocols: [https] }]
+    plugins: [{ name: key-auth, config: { key_names: [apikey] } }]
+  - name: catalog-api
+    url: https://httpbin.org
+    routes: [{ name: catalog, paths: [/catalog], protocols: [https] }]
+    plugins: [{ name: key-auth, config: { key_names: [apikey] } }]
+  - name: search-api            # rate limited → natural 429s
+    url: https://httpbin.org
+    routes: [{ name: search, paths: [/search], protocols: [https] }]
+    plugins:
+      - { name: key-auth, config: { key_names: [apikey] } }
+      - { name: rate-limiting, config: { minute: 40, policy: local } }
+  - name: legacy-api            # being decommissioned → constant 503s
+    url: https://httpbin.org
+    routes: [{ name: legacy, paths: [/legacy], protocols: [https] }]
+    plugins:
+      - name: request-termination
+        config: { status_code: 503, message: "legacy-api is being decommissioned" }
+
+consumers:
+  - username: bro
+    custom_id: bro
+  - username: mobile-app
+    keyauth_credentials: [{ key: '${{ env "DECK_KEY_MOBILE_APP" }}' }]
+  - username: web-app
+    keyauth_credentials: [{ key: '${{ env "DECK_KEY_WEB_APP" }}' }]
+  - username: partner-acme
+    keyauth_credentials: [{ key: '${{ env "DECK_KEY_PARTNER_ACME" }}' }]
+  - username: internal-batch
+    keyauth_credentials: [{ key: '${{ env "DECK_KEY_INTERNAL_BATCH" }}' }]
