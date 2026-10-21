@@ -140,6 +140,7 @@ Métricas usadas (OTel do Kong, como o Prometheus do Grafana Cloud as nomeia):
 ## Outros destinos
 
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): **arquitetura de cada caso**, componentes e todas as conexões (quem fala com quem, protocolo, auth)
+- [`docs/COMMANDS.md`](docs/COMMANDS.md): **comandos de exemplo para cada conexão** (curl, deck, bq, gcloud)
 - [`docs/GRAFANA-CLOUD.md`](docs/GRAFANA-CLOUD.md): passo a passo do que fizemos, as pegadinhas e o **checklist do que falta**
 - [`docs/SPLUNK.md`](docs/SPLUNK.md): HTTP Log → HEC, OTel → Observability Cloud, Collector, dashboard em SPL
 - [`docs/LOOKER-STUDIO.md`](docs/LOOKER-STUDIO.md): BigQuery, Google Sheets (hack) e agregados do Konnect, mais os componentes do relatório
