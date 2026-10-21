@@ -48,3 +48,10 @@ Settings: `config.env`. Secrets: `secrets/` (gitignored, never committed).
 
 ### 04 — Dashboard (next)
 Import the official Kong dashboard (grafana.com ID 7424) and add an AI panel set (tokens/cost by provider and model).
+
+### 05 — Public URL via ngrok (2026-10-21)
+`ngrok http 8000` (binary in `~/.local/bin`; brew cask is macOS-only:
+`curl -fsSL https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz | tar xz`).
+Authtoken: `ngrok config add-authtoken <token>` (dashboard.ngrok.com → Your Authtoken).
+Public URL from `curl -s 127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url'`.
+MCP (Streamable HTTP) endpoint = `<public_url>/<route path with AI MCP Proxy>`, e.g. `/mcp`.
