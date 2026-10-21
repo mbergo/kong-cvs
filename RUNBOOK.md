@@ -95,3 +95,11 @@ Control plane `serverless-api-gateway-demo`, proxy `https://3fb7c42224.us.server
 - Plugin **Key Authentication** scoped to Kong-Bro: key names `apikey`, key in header (+query), auth by
   **Centrally managed consumers**, realms `Current control plane` + `bro`.
 - Check: no key → 401; `-H "apikey: $KONG_TESTER_APIKEY"` → 200 with `X-Consumer-Username: bro`.
+
+### 09 — Grafana dashboard (2026-10-21)
+`dashboards/kong.json` → Grafana → Dashboards → New → **Import** → upload (or paste
+`https://raw.githubusercontent.com/mbergo/kong-cvs/main/dashboards/kong.json`) → pick the
+`...-prom`, `...-traces`, `...-logs` data sources in the variables at the top.
+- Kong Cloud row: TraceQL metrics on `resource.service.name="kong"` (rate by status/route, p50/p95, errors) + Loki logs.
+- Self-hosted row: Prometheus plugin metrics scraped by Alloy.
+- AI row: `kong_ai_llm_*` (empty until traffic goes through an AI model route).
