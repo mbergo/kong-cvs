@@ -87,3 +87,11 @@ Konnect → control plane (e.g. `serverless-api-gateway-demo`) → Plugins → *
   `secrets/grafana-otlp.env` (`Basic base64(<stack id 1885991>:<glc token with metrics/logs/traces:write>)`),
   **no quotes** in the form field.
 Token: Grafana Cloud → Connections → OpenTelemetry (OTLP) → Minimal setup → create token.
+
+### 08 — Serverless gateway: route + key auth (2026-10-21)
+Control plane `serverless-api-gateway-demo`, proxy `https://3fb7c42224.us.serverless.gateways.konggateway.com`.
+- Gateway service **Kong-Bro** → upstream `httpbin.org`; route path `/test` (methods and hosts empty).
+- Central consumer **bro** (API Gateway → Consumers) with a Key Auth credential (stored in `secrets/tester.env`).
+- Plugin **Key Authentication** scoped to Kong-Bro: key names `apikey`, key in header (+query), auth by
+  **Centrally managed consumers**, realms `Current control plane` + `bro`.
+- Check: no key → 401; `-H "apikey: $KONG_TESTER_APIKEY"` → 200 with `X-Consumer-Username: bro`.
