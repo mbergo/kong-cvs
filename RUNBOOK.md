@@ -114,3 +114,8 @@ GET/POST/PUT/DELETE, 2xx/4xx/5xx, `/delay` latency, `/bytes` payloads and unauth
 (`http_server_request_count_total`, `kong_latency_*_seconds_bucket`, `http_server_*_size_bytes`,
 `gen_ai_client_token_usage_total`, `kong_gen_ai_llm_cost_total`). Variables: data sources, gateway (`job`), consumer.
 Rows: executive KPIs, traffic & reliability, who/what, AI, and collapsed traces/logs + self-hosted.
+
+### 09c — Public (shareable) dashboard
+Grafana public dashboards don't support template variables, so `dashboards/kong-public.json` is the same
+dashboard with variables resolved (Grafana Cloud default data source UIDs `grafanacloud-prom|traces|logs`,
+gateway `kong`, all consumers). Import it, then **Share → Share externally → Public dashboard** → copy link.
