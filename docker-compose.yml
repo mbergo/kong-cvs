@@ -24,6 +24,7 @@ services:
     expose: ["8000", "8100"]
     healthcheck:
       test: ["CMD", "kong", "health"]
+      start_period: 40s
       interval: 15s
       timeout: 5s
       retries: 5
