@@ -662,8 +662,8 @@
     },
     {
       "id": 9,
-      "type": "barchart",
-      "title": "Requests per route (bar chart)",
+      "type": "bargauge",
+      "title": "Requests per route (15m)",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -680,12 +680,9 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sort_desc(sum by (kong_route_name) (increase(http_server_request_count_total{job=\"kong\"}[15m])))",
+          "expr": "sum by (kong_route_name) (increase(http_server_request_count_total{job=\"kong\"}[15m]))",
           "editorMode": "code",
           "legendFormat": "{{kong_route_name}}",
-          "instant": true,
-          "range": false,
-          "format": "table",
           "refId": "A"
         }
       ],
@@ -699,24 +696,16 @@
         "overrides": []
       },
       "options": {
+        "displayMode": "basic",
         "orientation": "horizontal",
-        "xField": "kong_route_name",
-        "colorByField": "kong_route_name",
-        "showValue": "always",
-        "legend": {
-          "showLegend": false
+        "showUnfilled": false,
+        "valueMode": "color",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
         }
-      },
-      "transformations": [
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true
-            }
-          }
-        }
-      ]
+      }
     },
     {
       "id": 10,
@@ -738,11 +727,9 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "topk(8, sum by (kong_auth_consumer_name) (rate(http_server_request_count_total{job=\"kong\",kong_auth_consumer_name!=\"\"}[5m])))",
+          "expr": "sum by (kong_auth_consumer_name) (rate(http_server_request_count_total{job=\"kong\"}[5m]))",
           "editorMode": "code",
           "legendFormat": "{{kong_auth_consumer_name}}",
-          "instant": true,
-          "range": false,
           "refId": "A"
         }
       ],
@@ -789,8 +776,6 @@
           "expr": "sum by (class) (label_replace(increase(http_server_request_count_total{job=\"kong\"}[15m]), \"class\", \"${1}xx\", \"http_response_status_code\", \"(.)..\"))",
           "editorMode": "code",
           "legendFormat": "{{class}}",
-          "instant": true,
-          "range": false,
           "refId": "A"
         }
       ],
@@ -1298,9 +1283,7 @@
           },
           "expr": "sum by (kong_route_name) (rate(http_server_request_count_total{job=\"kong\"}[5m]))",
           "editorMode": "code",
-          "instant": true,
-          "range": false,
-          "format": "table",
+          "legendFormat": "{{kong_route_name}}",
           "refId": "A"
         },
         {
@@ -1310,9 +1293,7 @@
           },
           "expr": "sum by (kong_route_name) (rate(http_server_request_count_total{job=\"kong\",http_response_status_code=~\"[45]..\"}[5m])) / sum by (kong_route_name) (rate(http_server_request_count_total{job=\"kong\"}[5m]))",
           "editorMode": "code",
-          "instant": true,
-          "range": false,
-          "format": "table",
+          "legendFormat": "{{kong_route_name}}",
           "refId": "B"
         },
         {
@@ -1322,9 +1303,7 @@
           },
           "expr": "histogram_quantile(0.95, sum by (le, kong_route_name) (rate(kong_latency_total_seconds_bucket{job=\"kong\"}[5m])))",
           "editorMode": "code",
-          "instant": true,
-          "range": false,
-          "format": "table",
+          "legendFormat": "{{kong_route_name}}",
           "refId": "C"
         }
       ],
@@ -1404,26 +1383,6 @@
                 "value": {
                   "type": "color-text"
                 }
-              },
-              {
-                "id": "thresholds",
-                "value": {
-                  "mode": "absolute",
-                  "steps": [
-                    {
-                      "color": "green",
-                      "value": null
-                    },
-                    {
-                      "color": "orange",
-                      "value": 0.8
-                    },
-                    {
-                      "color": "red",
-                      "value": 1.5
-                    }
-                  ]
-                }
               }
             ]
           }
@@ -1431,30 +1390,36 @@
       },
       "options": {
         "showHeader": true,
-        "cellHeight": "sm",
-        "sortBy": [
-          {
-            "displayName": "Req/s",
-            "desc": true
-          }
-        ]
+        "cellHeight": "sm"
       },
       "transformations": [
         {
-          "id": "merge",
-          "options": {}
+          "id": "joinByLabels",
+          "options": {
+            "value": "__name__",
+            "join": [
+              "kong_route_name"
+            ]
+          }
+        },
+        {
+          "id": "reduce",
+          "options": {
+            "reducers": [
+              "lastNotNull"
+            ],
+            "mode": "reduceFields",
+            "includeTimeField": false
+          }
         },
         {
           "id": "organize",
           "options": {
-            "excludeByName": {
-              "Time": true
-            },
             "renameByName": {
               "kong_route_name": "Route",
-              "Value #A": "Req/s",
-              "Value #B": "Error rate",
-              "Value #C": "p95"
+              "A": "Req/s",
+              "B": "Error rate",
+              "C": "p95"
             }
           }
         }
@@ -1543,8 +1508,6 @@
           "expr": "sum by (http_request_method) (increase(http_server_request_count_total{job=\"kong\"}[15m]))",
           "editorMode": "code",
           "legendFormat": "{{http_request_method}}",
-          "instant": true,
-          "range": false,
           "refId": "A"
         }
       ],
