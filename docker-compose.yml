@@ -15,8 +15,8 @@ services:
       KONG_CLUSTER_SERVER_NAME: ${KONNECT_CP_HOST:-c0b1bf91b1.us.cp.konghq.com}
       KONG_CLUSTER_TELEMETRY_ENDPOINT: ${KONNECT_TP_HOST:-c0b1bf91b1.us.tp.konghq.com}:443
       KONG_CLUSTER_TELEMETRY_SERVER_NAME: ${KONNECT_TP_HOST:-c0b1bf91b1.us.tp.konghq.com}
-      KONG_CLUSTER_CERT: ${KONG_CLUSTER_CERT:?Konnect data plane certificate}
-      KONG_CLUSTER_CERT_KEY: ${KONG_CLUSTER_CERT_KEY:?Konnect data plane private key}
+      KONG_CLUSTER_CERT: ${KONG_CLUSTER_CERT:?required}
+      KONG_CLUSTER_CERT_KEY: ${KONG_CLUSTER_CERT_KEY:?required}
       KONG_LUA_SSL_TRUSTED_CERTIFICATE: system
       KONG_STATUS_LISTEN: 0.0.0.0:8100
       KONG_TLS_CERTIFICATE_VERIFY: ${KONG_TLS_CERTIFICATE_VERIFY:-on}
@@ -38,7 +38,7 @@ services:
     environment:
       KONG_TARGET: kong-dp:8100
       ALLOY_INSTANCE: ${ALLOY_INSTANCE:-coolify}
-      GRAFANA_PROM_URL: ${GRAFANA_PROM_URL:?Grafana Cloud remote_write URL}
-      GRAFANA_PROM_USER: ${GRAFANA_PROM_USER:?Grafana Cloud Prometheus user id}
-      GRAFANA_PROM_TOKEN: ${GRAFANA_PROM_TOKEN:?Grafana Cloud token (glc_...)}
+      GRAFANA_PROM_URL: ${GRAFANA_PROM_URL:?required}
+      GRAFANA_PROM_USER: ${GRAFANA_PROM_USER:?required}
+      GRAFANA_PROM_TOKEN: ${GRAFANA_PROM_TOKEN:?required}
     command: ["run", "/etc/alloy/config.alloy", "--storage.path=/var/lib/alloy/data"]
