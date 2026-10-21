@@ -75,3 +75,15 @@ Everything deploys from this repo; only secrets are set in Coolify.
 5. Check: Konnect shows a new DP node "In sync"; Grafana Explore `kong_control_plane_connected{instance="coolify"}` = 1.
 
 Don't use Coolify's Kong one-click template: it runs a standalone Kong with its own DB, not a Konnect DP.
+
+### 07 — OpenTelemetry push to Grafana Cloud (2026-10-21)
+For Kong-hosted data planes (Serverless/Dedicated) where :8100 can't be scraped. Works on any DP.
+Konnect → control plane (e.g. `serverless-api-gateway-demo`) → Plugins → **OpenTelemetry** → Global:
+- Traces `https://otlp-gateway-prod-us-east-3.grafana.net/otlp/v1/traces`
+- Logs and Access logs `https://otlp-gateway-prod-us-east-3.grafana.net/otlp/v1/logs`
+- Metrics `https://otlp-gateway-prod-us-east-3.grafana.net/otlp/v1/metrics`, push interval 15,
+  request/bandwidth/latency/upstream-health/**AI** metrics on.
+- Additional settings → Headers: `Authorization` = value of `GRAFANA_OTLP_AUTH_HEADER` in
+  `secrets/grafana-otlp.env` (`Basic base64(<stack id 1885991>:<glc token with metrics/logs/traces:write>)`),
+  **no quotes** in the form field.
+Token: Grafana Cloud → Connections → OpenTelemetry (OTLP) → Minimal setup → create token.
