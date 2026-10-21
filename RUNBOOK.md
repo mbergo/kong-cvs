@@ -36,13 +36,15 @@ Settings: `config.env`. Secrets: `secrets/` (gitignored, never committed).
   with status-code, latency, bandwidth, upstream-health and **AI** metrics (tokens, cost per provider/model).
 - Check: `make metrics` shows `kong_*` series (AI series appear after the first AI-proxy request).
 
-### 03 — Ship metrics to Grafana Cloud (pending: Grafana Cloud credentials)
+### 03 — Ship metrics to Grafana Cloud (done 2026-10-21)
 `make alloy-up`
 
 - Needs `secrets/grafana.env` with `GRAFANA_PROM_URL`, `GRAFANA_PROM_USER`, `GRAFANA_PROM_TOKEN`
-  (grafana.com → stack → Prometheus → Details; token with `metrics:write`).
+  (Grafana Cloud → Connections → Hosted Prometheus metrics → single instance → Directly →
+  Create token, scope `set:alloy-data-write`; copy url/username/password from the generated config).
 - Runs `grafana/alloy` on the host network, scraping `127.0.0.1:8100/metrics` every 15s (`alloy/config.alloy`).
-- Check: Alloy UI `http://127.0.0.1:12345`; in Grafana Explore, query `kong_nginx_requests_total`.
+- Check: `curl -s 127.0.0.1:12345/metrics | grep remote_storage_samples` (failed_total must be 0);
+  in Grafana Explore, query `kong_control_plane_connected`.
 
 ### 04 — Dashboard (next)
 Import the official Kong dashboard (grafana.com ID 7424) and add an AI panel set (tokens/cost by provider and model).
