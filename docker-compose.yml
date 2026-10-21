@@ -1,0 +1,43 @@
+# Kong AI Gateway data plane (Konnect) + Grafana Alloy.
+# Coolify: New resource → GitHub repo mbergo/kong-cvs → Build pack "Docker Compose" → /docker-compose.yml.
+# Only the secrets are required; everything else has a default (see .env.example).
+services:
+  kong-dp:
+    image: ${KONG_IMAGE:-kong/kong-ai-gateway:2.2.0-distroless}
+    restart: unless-stopped
+    environment:
+      KONG_ROLE: data_plane
+      KONG_DATABASE: "off"
+      KONG_VITALS: "off"
+      KONG_KONNECT_MODE: "on"
+      KONG_CLUSTER_MTLS: pki
+      KONG_CLUSTER_CONTROL_PLANE: ${KONNECT_CP_HOST:-c0b1bf91b1.us.cp.konghq.com}:443
+      KONG_CLUSTER_SERVER_NAME: ${KONNECT_CP_HOST:-c0b1bf91b1.us.cp.konghq.com}
+      KONG_CLUSTER_TELEMETRY_ENDPOINT: ${KONNECT_TP_HOST:-c0b1bf91b1.us.tp.konghq.com}:443
+      KONG_CLUSTER_TELEMETRY_SERVER_NAME: ${KONNECT_TP_HOST:-c0b1bf91b1.us.tp.konghq.com}
+      KONG_CLUSTER_CERT: ${KONG_CLUSTER_CERT:?Konnect data plane certificate}
+      KONG_CLUSTER_CERT_KEY: ${KONG_CLUSTER_CERT_KEY:?Konnect data plane private key}
+      KONG_LUA_SSL_TRUSTED_CERTIFICATE: system
+      KONG_STATUS_LISTEN: 0.0.0.0:8100
+      KONG_TLS_CERTIFICATE_VERIFY: ${KONG_TLS_CERTIFICATE_VERIFY:-on}
+      SERVICE_FQDN_KONG_8000: ""   # Coolify: public domain → port 8000
+    expose: ["8000", "8100"]
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  alloy:
+    image: ${GRAFANA_ALLOY_IMAGE:-grafana/alloy:latest}
+    restart: unless-stopped
+    depends_on: [kong-dp]
+    environment:
+      KONG_TARGET: kong-dp:8100
+      ALLOY_INSTANCE: ${ALLOY_INSTANCE:-coolify}
+      GRAFANA_PROM_URL: ${GRAFANA_PROM_URL:?Grafana Cloud remote_write URL}
+      GRAFANA_PROM_USER: ${GRAFANA_PROM_USER:?Grafana Cloud Prometheus user id}
+      GRAFANA_PROM_TOKEN: ${GRAFANA_PROM_TOKEN:?Grafana Cloud token (glc_...)}
+    command: ["run", "/etc/alloy/config.alloy", "--storage.path=/var/lib/alloy/data"]
+    volumes:
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro

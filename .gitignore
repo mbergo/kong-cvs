@@ -2,3 +2,4 @@ secrets/
 *.key
 *.pem
 .env
+!.env.example

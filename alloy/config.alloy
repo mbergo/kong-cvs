@@ -1,9 +1,10 @@
 // Scrape the Kong data plane status endpoint and push to Grafana Cloud Prometheus.
+// KONG_TARGET: host:port of the Kong status listener (local: 127.0.0.1:8100, compose: kong-dp:8100).
 prometheus.scrape "kong" {
   targets = [{
-    __address__ = "127.0.0.1:" + sys.env("KONG_STATUS_PORT"),
+    __address__ = sys.env("KONG_TARGET"),
     job         = "kong",
-    instance    = constants.hostname,
+    instance    = coalesce(sys.env("ALLOY_INSTANCE"), constants.hostname),
   }]
   scrape_interval = "15s"
   forward_to      = [prometheus.remote_write.grafana_cloud.receiver]

@@ -10,7 +10,7 @@ docker rm -f "$GRAFANA_ALLOY_CONTAINER_NAME" >/dev/null 2>&1 || true
 docker run -d --name "$GRAFANA_ALLOY_CONTAINER_NAME" --restart unless-stopped \
   --network host \
   --env-file secrets/grafana.env \
-  -e "KONG_STATUS_PORT=$KONG_STATUS_PORT" \
+  -e "KONG_TARGET=127.0.0.1:$KONG_STATUS_PORT" \
   -v "$PWD/alloy/config.alloy:/etc/alloy/config.alloy:ro" \
   "$GRAFANA_ALLOY_IMAGE" \
   run /etc/alloy/config.alloy --server.http.listen-addr=127.0.0.1:12345 --storage.path=/var/lib/alloy/data

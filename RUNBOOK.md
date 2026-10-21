@@ -64,8 +64,14 @@ sets `KONG_TLS_CERTIFICATE_VERIFY=off` (script default is `on`); then `make up`.
 In prod keep `on` and turn `ssl_verify` back on in the plugin instead.
 
 ### 06 — Host on Coolify (xyz.s4z1.cloud)
-Coolify → project → **+ New → Docker Compose (Empty)** → paste `coolify/docker-compose.yml`.
-Environment variables: `KONG_CLUSTER_CERT`, `KONG_CLUSTER_CERT_KEY` (contents of `secrets/cluster.crt|key`),
-`GRAFANA_PROM_URL`, `GRAFANA_PROM_USER`, `GRAFANA_PROM_TOKEN` (from `secrets/grafana.env`),
-optional `KONG_TLS_CERTIFICATE_VERIFY=off` (test only). Set the domain on `kong-dp` (port 8000), deploy.
+Everything deploys from this repo; only secrets are set in Coolify.
+
+1. Coolify → project → **+ New → Private Repository (with GitHub App)** → pick `mbergo/kong-cvs`, branch `main`.
+2. Build pack **Docker Compose**, compose file `/docker-compose.yml`.
+3. Environment variables (see `.env.example`): `KONG_CLUSTER_CERT`, `KONG_CLUSTER_CERT_KEY`
+   (contents of `secrets/cluster.crt|key`, mark *Is Multiline*), `GRAFANA_PROM_URL`, `GRAFANA_PROM_USER`,
+   `GRAFANA_PROM_TOKEN` (from `secrets/grafana.env`). Test only: `KONG_TLS_CERTIFICATE_VERIFY=off`.
+4. Domain on service `kong-dp` (port 8000), e.g. `https://kong.s4z1.cloud` → **Deploy**.
+5. Check: Konnect shows a new DP node "In sync"; Grafana Explore `kong_control_plane_connected{instance="coolify"}` = 1.
+
 Don't use Coolify's Kong one-click template: it runs a standalone Kong with its own DB, not a Konnect DP.
