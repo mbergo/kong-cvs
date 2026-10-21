@@ -22,8 +22,10 @@ docker run -d --name "$KONG_CONTAINER_NAME" --restart unless-stopped \
   -e "KONG_CLUSTER_CERT=$(cat "$CLUSTER_CERT_FILE")" \
   -e "KONG_CLUSTER_CERT_KEY=$(cat "$CLUSTER_KEY_FILE")" \
   -e KONG_LUA_SSL_TRUSTED_CERTIFICATE=system \
+  -e "KONG_STATUS_LISTEN=0.0.0.0:8100" \
   -p "$KONG_PROXY_PORT:8000" \
   -p "$KONG_PROXY_TLS_PORT:8443" \
+  -p "127.0.0.1:$KONG_STATUS_PORT:8100" \
   "$KONG_IMAGE"
 
 echo "waiting for Konnect sync..."

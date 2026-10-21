@@ -7,7 +7,7 @@ SUDO ?= sudo
 DOCKER := $(SUDO) docker
 
 .DEFAULT_GOAL := help
-.PHONY: help up down restart status logs check clean-stale
+.PHONY: help up down restart status logs check clean-stale metrics prometheus-plugin alloy-up alloy-down alloy-logs
 
 help: ## List targets
 	@grep -hE '^[a-z-]+:.*## ' Makefile | awk -F':.*## ' '{printf "  make %-12s %s\n", $$1, $$2}'
@@ -34,3 +34,18 @@ check: ## Konnect connection + proxy reachability
 clean-stale: ## Remove never-started containers of the Kong image
 	@ids=$$($(DOCKER) ps -aq --filter status=created --filter ancestor=$(KONG_IMAGE)); \
 	if [ -n "$$ids" ]; then $(DOCKER) rm $$ids; else echo "nothing to clean"; fi
+
+metrics: ## Show the first Kong metrics lines (needs step 02)
+	@curl -s http://127.0.0.1:$(KONG_STATUS_PORT)/metrics | grep -v '^#' | head -20
+
+prometheus-plugin: ## Step 02: enable the global Prometheus plugin in Konnect
+	scripts/02-enable-prometheus-plugin.sh
+
+alloy-up: ## Step 03: ship metrics to Grafana Cloud with Alloy
+	$(SUDO) scripts/03-run-alloy.sh
+
+alloy-down: ## Remove the Alloy container
+	-$(DOCKER) rm -f $(GRAFANA_ALLOY_CONTAINER_NAME)
+
+alloy-logs: ## Follow Alloy logs
+	$(DOCKER) logs -f --tail 100 $(GRAFANA_ALLOY_CONTAINER_NAME)

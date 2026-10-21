@@ -22,3 +22,27 @@ Settings: `config.env`. Secrets: `secrets/` (gitignored, never committed).
 - Origin: the manual `~/kong.sh` (pasted from Konnect), run with `sudo bash ./kong.sh`.
   Without sudo the containers were only created, never started (`make clean-stale` removes them).
   The original pasted script is kept as `secrets/kong.sh.original` (gitignored: it embeds the private key).
+
+### 01b — Expose the status/metrics endpoint (2026-10-21)
+`scripts/01-run-dataplane.sh` now sets `KONG_STATUS_LISTEN=0.0.0.0:8100` and publishes it on
+`127.0.0.1:8100` only. Re-run `make up` to apply (recreates `kong-dp`, a few seconds of downtime).
+
+### 02 — Enable Prometheus metrics in Konnect (pending: Konnect token)
+`make prometheus-plugin`
+
+- Needs `secrets/konnect.env` with `KONNECT_TOKEN=kpat_...`
+  (Konnect → profile → Personal Access Tokens). Requires `jq`.
+- Finds the control plane by `KONNECT_CP_HOST` and creates/updates a **global** `prometheus` plugin
+  with status-code, latency, bandwidth, upstream-health and **AI** metrics (tokens, cost per provider/model).
+- Check: `make metrics` shows `kong_*` series (AI series appear after the first AI-proxy request).
+
+### 03 — Ship metrics to Grafana Cloud (pending: Grafana Cloud credentials)
+`make alloy-up`
+
+- Needs `secrets/grafana.env` with `GRAFANA_PROM_URL`, `GRAFANA_PROM_USER`, `GRAFANA_PROM_TOKEN`
+  (grafana.com → stack → Prometheus → Details; token with `metrics:write`).
+- Runs `grafana/alloy` on the host network, scraping `127.0.0.1:8100/metrics` every 15s (`alloy/config.alloy`).
+- Check: Alloy UI `http://127.0.0.1:12345`; in Grafana Explore, query `kong_nginx_requests_total`.
+
+### 04 — Dashboard (next)
+Import the official Kong dashboard (grafana.com ID 7424) and add an AI panel set (tokens/cost by provider and model).
