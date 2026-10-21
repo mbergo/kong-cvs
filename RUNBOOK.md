@@ -103,3 +103,14 @@ Control plane `serverless-api-gateway-demo`, proxy `https://3fb7c42224.us.server
 - Kong Cloud row: TraceQL metrics on `resource.service.name="kong"` (rate by status/route, p50/p95, errors) + Loki logs.
 - Self-hosted row: Prometheus plugin metrics scraped by Alloy.
 - AI row: `kong_ai_llm_*` (empty until traffic goes through an AI model route).
+
+### 10 — Synthetic traffic generator (2026-10-21)
+`make traffic` runs `scripts/10-traffic-gen.sh` in a `curlimages/curl` container (restart unless-stopped):
+GET/POST/PUT/DELETE, 2xx/4xx/5xx, `/delay` latency, `/bytes` payloads and unauthenticated calls,
+~2 req/s with a burst every ~10 min. Needs `secrets/tester.env`. Stop with `make traffic-stop`.
+
+### 09b — Executive dashboard
+`dashboards/kong.json` (uid `kong-exec`) uses the Kong OTel metric names as Prometheus sees them
+(`http_server_request_count_total`, `kong_latency_*_seconds_bucket`, `http_server_*_size_bytes`,
+`gen_ai_client_token_usage_total`, `kong_gen_ai_llm_cost_total`). Variables: data sources, gateway (`job`), consumer.
+Rows: executive KPIs, traffic & reliability, who/what, AI, and collapsed traces/logs + self-hosted.

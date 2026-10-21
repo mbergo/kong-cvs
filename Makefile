@@ -7,7 +7,7 @@ SUDO ?= sudo
 DOCKER := $(SUDO) docker
 
 .DEFAULT_GOAL := help
-.PHONY: help up down restart status logs check clean-stale metrics prometheus-plugin alloy-up alloy-down alloy-logs
+.PHONY: help up down restart status logs check clean-stale metrics prometheus-plugin alloy-up alloy-down alloy-logs traffic traffic-stop traffic-logs
 
 help: ## List targets
 	@grep -hE '^[a-z-]+:.*## ' Makefile | awk -F':.*## ' '{printf "  make %-12s %s\n", $$1, $$2}'
@@ -49,3 +49,14 @@ alloy-down: ## Remove the Alloy container
 
 alloy-logs: ## Follow Alloy logs
 	$(DOCKER) logs -f --tail 100 $(GRAFANA_ALLOY_CONTAINER_NAME)
+
+traffic: ## Step 10: start continuous mixed traffic against the Kong Cloud route
+	-$(DOCKER) rm -f kong-traffic >/dev/null 2>&1
+	$(DOCKER) run -d --name kong-traffic --restart unless-stopped --env-file secrets/tester.env \
+	  -v $(CURDIR)/scripts/10-traffic-gen.sh:/gen.sh:ro --entrypoint sh curlimages/curl /gen.sh
+
+traffic-stop: ## Stop the traffic generator
+	-$(DOCKER) rm -f kong-traffic
+
+traffic-logs: ## Generator container status
+	@$(DOCKER) ps -a --filter name=kong-traffic --format '{{.Names}} {{.Status}}'
