@@ -62,3 +62,10 @@ Symptom: Konnect shows the node "Out of sync" / "Sync deltas parse failure (erro
 A plugin with `ssl_verify: false` makes the DP reject the whole config. For test, `config.env`
 sets `KONG_TLS_CERTIFICATE_VERIFY=off` (script default is `on`); then `make up`.
 In prod keep `on` and turn `ssl_verify` back on in the plugin instead.
+
+### 06 — Host on Coolify (xyz.s4z1.cloud)
+Coolify → project → **+ New → Docker Compose (Empty)** → paste `coolify/docker-compose.yml`.
+Environment variables: `KONG_CLUSTER_CERT`, `KONG_CLUSTER_CERT_KEY` (contents of `secrets/cluster.crt|key`),
+`GRAFANA_PROM_URL`, `GRAFANA_PROM_USER`, `GRAFANA_PROM_TOKEN` (from `secrets/grafana.env`),
+optional `KONG_TLS_CERTIFICATE_VERIFY=off` (test only). Set the domain on `kong-dp` (port 8000), deploy.
+Don't use Coolify's Kong one-click template: it runs a standalone Kong with its own DB, not a Konnect DP.
