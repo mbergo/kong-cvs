@@ -67,8 +67,8 @@
       "title": "Requests/s by status",
       "type": "timeseries",
       "datasource": {
-        "type": "tempo",
-        "uid": "${tempo}"
+        "type": "prometheus",
+        "uid": "${prom}"
       },
       "gridPos": {
         "x": 0,
@@ -78,15 +78,13 @@
       },
       "targets": [
         {
-          "queryType": "traceql",
-          "query": "{resource.service.name=\"$service\" && kind=server} | rate() by (span.http.response.status_code)",
-          "limit": 20,
-          "tableType": "traces",
           "refId": "A",
           "datasource": {
-            "type": "tempo",
-            "uid": "${tempo}"
-          }
+            "type": "prometheus",
+            "uid": "${prom}"
+          },
+          "legendFormat": "{{http_response_status_code}}",
+          "expr": "sum by (http_response_status_code) (rate(http_server_request_count_total{job=\"$service\"}[$__rate_interval]))"
         }
       ],
       "fieldConfig": {
@@ -134,11 +132,11 @@
     },
     {
       "id": 4,
-      "title": "Errors/s (status=error)",
+      "title": "Errors/s (4xx + 5xx)",
       "type": "timeseries",
       "datasource": {
-        "type": "tempo",
-        "uid": "${tempo}"
+        "type": "prometheus",
+        "uid": "${prom}"
       },
       "gridPos": {
         "x": 0,
@@ -148,15 +146,13 @@
       },
       "targets": [
         {
-          "queryType": "traceql",
-          "query": "{resource.service.name=\"$service\" && status=error} | rate()",
-          "limit": 20,
-          "tableType": "traces",
           "refId": "A",
           "datasource": {
-            "type": "tempo",
-            "uid": "${tempo}"
-          }
+            "type": "prometheus",
+            "uid": "${prom}"
+          },
+          "legendFormat": "{{http_response_status_code}}",
+          "expr": "sum by (http_response_status_code) (rate(http_server_request_count_total{job=\"$service\", http_response_status_code=~\"4..|5..\"}[$__rate_interval]))"
         }
       ],
       "fieldConfig": {
