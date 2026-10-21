@@ -29,7 +29,10 @@ services:
       retries: 5
 
   alloy:
-    image: ${GRAFANA_ALLOY_IMAGE:-grafana/alloy:latest}
+    build:
+      context: ./alloy
+      args:
+        ALLOY_IMAGE: ${GRAFANA_ALLOY_IMAGE:-grafana/alloy:latest}
     restart: unless-stopped
     depends_on: [kong-dp]
     environment:
@@ -39,5 +42,3 @@ services:
       GRAFANA_PROM_USER: ${GRAFANA_PROM_USER:?Grafana Cloud Prometheus user id}
       GRAFANA_PROM_TOKEN: ${GRAFANA_PROM_TOKEN:?Grafana Cloud token (glc_...)}
     command: ["run", "/etc/alloy/config.alloy", "--storage.path=/var/lib/alloy/data"]
-    volumes:
-      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
