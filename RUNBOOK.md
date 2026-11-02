@@ -122,6 +122,108 @@ Grafana public dashboards don't support template variables, so `dashboards/kong-
 dashboard with variables resolved (Grafana Cloud default data source UIDs `grafanacloud-prom|traces|logs`,
 gateway `kong`, all consumers). Import it, then **Share → Share externally → Public dashboard** → copy link.
 
+### 13 — Claude Inference hooks: verdict server (2026-11-02)
+`make hook-server` (= `scripts/13-hook-server.py`), listens on :8200.
+
+Inference hooks = Claude Enterprise sends every governed prompt (and tool call) as a signed
+HTTPS POST to **our** endpoint and waits for `{"action":"allow"}` or `{"action":"deny",...}`
+before inference runs. Kong proxies that POST to this verdict server.
+
+```
+                    ANTHROPIC SIDE                                   OUR SIDE (AWS)
+┌──────────────────────────────────────────────┐   ┌─────────────────────────────────────────────┐
+│ claude.ai / Claude Code / Cowork users       │   │        Route53  hook.example.com            │
+│        │ prompt                              │   │           │                                 │
+│        ▼                                     │   │           ▼                                 │
+│ Anthropic inference pipeline                 │   │  ALB :443 (ACM cert, no redirects)          │
+│   │  signed POST (prompt/tool_call frame)    │   │           │                                 │
+│   │  from 160.79.106.0/24                    │   │           ▼                                 │
+│   └─────────────────────────────────────────────▶│  Kong DP (EC2/EKS)  route /claude-hook      │
+│   ◀─ waits ≤ verdict timeout (default 5s) ──────│   plugins: ip-restriction(160.79.106.0/24)  │
+│        │                                     │   │            key-auth(x-hook-key)             │
+│        ▼                                     │   │            prometheus (global, step 02)     │
+│  allow → model runs                          │   │           │                                 │
+│  deny  → user sees deny_reason               │   │           ▼                                 │
+│                                              │   │  verdict server :8200                       │
+│ CONTROL PLANE #1: claude.ai Org settings     │   │   HMAC verify (whsec_…) + policy            │
+│  Data and privacy → Inference hooks          │   │   HOOK_MODE = enforce | alert | off         │
+│  (Enforce verdicts, Shadow, failure, %)      │   │                                             │
+└──────────────────────────────────────────────┘   │ CONTROL PLANE #2: Konnect (c0b1bf91b1)      │
+                                                   │  service/route/plugins via script 14        │
+                                                   └─────────────────────────────────────────────┘
+```
+
+Two independent mode switches:
+- **Anthropic control plane** (claude.ai → Organization settings → Data and privacy →
+  Inference hooks, needs Owner/Primary owner): Off (Enforce verdicts off) / **Shadow mode**
+  (verdicts flow, nothing blocked) / Enforcing (Mode = Allow or Block the request).
+- **Our side** `HOOK_MODE` in `secrets/hook.env`: `enforce` (policy hit → deny),
+  `alert` (policy hit → log ALERT, return allow), `off` (allow everything).
+
+Golden rule: on our side, "off"/"alert" ALWAYS mean "return 200 allow", never a 403/503 —
+any non-200 from Kong or the server is a *webhook failure*, which triggers the org's
+Failure handling (fail-open or fail-closed) and counts toward Anthropic's circuit breaker.
+
+Config: `secrets/hook.env` (gitignored) with `HOOK_SIGNING_SECRET=whsec_…` (shown ONCE in
+claude.ai, step 15), `HOOK_MODE=alert`, `HOOK_PORT=8200`, plus `HOOK_UPSTREAM_URL`,
+`HOOK_ROUTE_PATH=/claude-hook`, `HOOK_KEY=<random>` for step 14.
+Demo policy = 3 regexes in the script; swap for the real engine (Fiddler, etc.).
+Check: `curl -s localhost:8200` → `{"status":"ok","mode":"alert"}`.
+
+### 14 — Claude Inference hooks: Kong route + plugins (2026-11-02)
+`make hook-entities` (= `scripts/14-hook-entities.sh`), Konnect API, idempotent.
+
+- Service `claude-hook` → `HOOK_UPSTREAM_URL`, timeouts 1000/3000/3000ms, retries 1
+  (everything must fit in Claude's verdict budget, default 5000ms for the WHOLE exchange
+  incl. TLS handshake; Anthropic retries once only on connection failure).
+- Route `/claude-hook` (strip_path), plugins scoped to it:
+  `ip-restriction` allow `160.79.106.0/24` (Anthropic egress; defense in depth, the HMAC
+  check in the server is the real authentication) and `key-auth` on header `x-hook-key`
+  (consumer `anthropic`; same value configured in claude.ai as a custom request header).
+- AWS front door requirements (hard, from Anthropic): `https://` on port 443, public IPv4,
+  cert from a public CA (ACM on the ALB), **no redirects** (the configured URL answers
+  directly), no ngrok/tunnels (blocked — step 05's ngrok does NOT work here). Transcripts
+  are sent untruncated: allow bodies up to 64 MiB end to end (ALB is fine; do NOT front
+  this with AWS API Gateway, 10 MB hard limit; mind nginx `client_max_body_size` if another
+  proxy sits in the path — Kong's default is unlimited).
+- Check: `curl -s https://hook.example.com/claude-hook` → 403 (ip-restriction) from a
+  laptop is expected; from an allowed source without the key → 401; claude.ai
+  **Test connection** (step 15) is the real end-to-end check.
+
+### 15 — Claude Inference hooks: Anthropic control plane (claude.ai)
+No script — UI only, needs the **Owner** or **Primary owner** role (`organization:manage`).
+claude.ai → **Organization settings → Data and privacy → Inference hooks**:
+
+1. **Allow for your organization** on (this alone inspects nothing; it always forces
+   Enforce verdicts off).
+2. **Configure** → Endpoint URL `https://hook.example.com/claude-hook` → Next.
+3. Copy the **signing secret** (`whsec_…`, shown once, only rotatable later) →
+   `secrets/hook.env` `HOOK_SIGNING_SECRET`, restart the verdict server.
+4. **Custom request headers**: add `x-hook-key` = `HOOK_KEY` (values are write-only;
+   changing the URL clears them). **Test connection** → should report an *allow* verdict
+   and the measured round trip.
+5. **Failure handling**: Mode **Allow the request** (fail-open) to start; timeout 5000ms.
+   Flip to **Block the request** (fail-closed) only when the server is proven stable.
+6. **Rollout**: Requests inspected (%) — start 10%, then 100%.
+7. Turn on **Enforce verdicts** with Mode = **Shadow mode** first ("alert" at the
+   Anthropic level: verdicts flow, nothing blocked, badge "Shadow mode — not blocking").
+   **Validate tool calls** on (default) also sends tool_call frames.
+8. Go live: Mode → Allow/Block the request. Changes propagate in ~1 min.
+
+Rollout ladder (safe order): 13 server in `alert` → 14 route → 15.1–15.6 with Shadow 10%
+→ Shadow 100% (tune policy on real traffic, nothing blocks) → `HOOK_MODE=enforce` +
+claude.ai Mode=Allow the request (denies now block; webhook failures fail open) →
+optionally Failure handling=Block the request (fail-closed).
+
+Ops notes: claude.ai shows endpoint health (status, failures/min, block rate, recent
+errors, circuit breaker). Sustained failures trip the **circuit breaker** → our server
+stops being called and Failure handling applies to everything; auto-recovery probes
+(`source.application=config-test`) start after 10 min, or reset by toggling Enforce
+verdicts. Denials land in the Activity Feed as `inference_hooks_request_denied` with our
+`reference_id` → joinable to the server's JSONL log. Kong side: the route shows up in the
+step 02/07 Prometheus/OTel metrics and the step 09 dashboards like any other route.
+Docs: platform.claude.com/docs/en/manage-claude/inference-hooks{,-configuration,-endpoint}.
+
 ## From zero (Kong Cloud + Grafana Cloud), all CLI
 1. `secrets/konnect.env` (KONNECT_TOKEN=kpat_…, org with the serverless CP),
    `secrets/grafana-otlp.env` (GRAFANA_OTLP_AUTH_HEADER), `secrets/grafana-api.env` (GRAFANA_URL, GRAFANA_API_TOKEN).
