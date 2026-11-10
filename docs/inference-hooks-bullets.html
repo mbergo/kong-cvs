@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inference hooks vs Bedrock — bullet points</title>
+<style>
+  :root { --bg:#ffffff; --fg:#1a1a1a; --muted:#666; --line:#ddd; --card:#f6f6f4;
+          --accent:#5a4fcf; --ok:#0f6e56; --warn:#854f0b; --bad:#a32d2d; --code:#f0efe9; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#1b1b1a; --fg:#e8e6df; --muted:#9c9a92; --line:#3a3a38; --card:#242422;
+            --accent:#afa9ec; --ok:#5dcaa5; --warn:#ef9f27; --bad:#f09595; --code:#2b2b29; }
+  }
+  body { margin:0 auto; max-width:820px; padding:40px 24px; background:var(--bg); color:var(--fg);
+         font:16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  h1 { font-size:25px; margin:0 0 4px; } h2 { font-size:18px; margin:28px 0 6px; }
+  .sub { color:var(--muted); margin-bottom:20px; }
+  a { color:var(--accent); }
+  ul { margin:6px 0 14px; padding-left:22px; }
+  li { margin:5px 0; }
+  li::marker { color:var(--muted); }
+  code { font-family:ui-monospace, Menlo, monospace; font-size:13.5px; background:var(--code);
+         padding:1px 5px; border-radius:4px; }
+  pre { font-family:ui-monospace, Menlo, monospace; font-size:13px; background:var(--code);
+        padding:12px 14px; border-radius:10px; overflow-x:auto; line-height:1.5; }
+  pre code { background:none; padding:0; }
+  .key { border-left:3px solid var(--warn); background:var(--card); padding:8px 14px; margin:14px 0; }
+  .ok { color:var(--ok); font-weight:600; } .bad { color:var(--bad); font-weight:600; }
+  .muted { color:var(--muted); }
+  footer { margin-top:30px; color:var(--muted); font-size:13px; border-top:1px solid var(--line); padding-top:10px; }
+</style>
+</head>
+<body>
+
+<h1>Governing Claude: Inference hooks vs Bedrock Guardrails</h1>
+<p class="sub">Two surfaces, two control models — bullet-point version for engineers.</p>
+
+<h2>The core idea</h2>
+<ul>
+  <li>There are <b>two different doors</b> into the same model, and each has its own enforcement story.</li>
+  <li><b>Employees chatting</b> (claude.ai, Claude Code, Cowork) → governed by <a href="https://platform.claude.com/docs/en/manage-claude/inference-hooks">Inference hooks</a> — <em>their pipe, our opinion</em>.</li>
+  <li><b>Applications calling the API on AWS</b> (Bedrock) → governed by Bedrock Guardrails — <em>our pipe, our rules</em>.</li>
+</ul>
+
+<h2>Inference hooks — their pipe, our opinion</h2>
+<ul>
+  <li>Claude Enterprise feature. The checkpoint lives <b>inside Anthropic's pipeline, before the model runs</b>.</li>
+  <li>You don't call Anthropic — <b>Anthropic calls you</b>: a signed HTTPS POST with the conversation, to a public endpoint you host.</li>
+  <li>Your server answers HTTP 200 with <code>{"action":"allow"}</code> or <code>{"action":"deny","deny_reason":"..."}</code>. Deny → the user sees your reason. Protocol: <a href="https://platform.claude.com/docs/en/manage-claude/inference-hooks-endpoint">endpoint docs</a>.</li>
+  <li>With tool-call validation on, Claude's tool calls get the same allow/deny treatment before they run.</li>
+  <li>Three states, set <b>only in the console</b> (claude.ai → Organization settings → Data and privacy → Inference hooks, Owner role — <a href="https://platform.claude.com/docs/en/manage-claude/inference-hooks-configuration">configuration docs</a>):
+    <ul>
+      <li><b>Off</b> — Enforce verdicts off; your server is never contacted.</li>
+      <li><b>Inform</b> (Shadow mode) — your server receives everything and votes; the vote is ignored; nobody is blocked. For tuning policy on real traffic, with a rollout %.</li>
+      <li><b>Enforce</b> — a deny blocks the user. Failure handling decides what happens when your server is down: fail-open or fail-closed.</li>
+    </ul>
+  </li>
+  <li><b>No API for any of this.</b> The Admin API covers members, workspaces, keys, spend limits — not hooks. Flipping enforcement is a human in the console.</li>
+  <li>What the third-party side <em>can</em> do — the asymmetry:
+    <ul>
+      <li class="ok">You can always soften: your server deciding "evaluate but allow" is a runtime inform mode you own, per request, per user, per app.</li>
+      <li class="bad">You can never harden: Shadow ignores your deny; Off never calls you. No server-side trick forces blocking.</li>
+      <li class="bad">Errors are not a lever: non-200 or timeout = webhook failure → failure-handling policy applies, and sustained failures trip a circuit breaker that stops the calls entirely.</li>
+    </ul>
+  </li>
+  <li>Rules that bite: a deny is <b>HTTP 200</b>, never an error · ~5s budget for the whole exchange · bodies up to 64&nbsp;MiB · endpoint must be public HTTPS, no tunnels · traffic comes from <code>160.79.106.0/24</code> (<a href="https://platform.claude.com/docs/en/api/ip-addresses">IP ranges</a>) · every denial lands in the <a href="https://platform.claude.com/docs/en/manage-claude/compliance-activity-feed">Activity Feed</a> with your <code>reference_id</code>.</li>
+  <li class="muted">Scope: claude.ai, Claude Code, Cowork only. <b>Not Bedrock, not Vertex.</b></li>
+</ul>
+
+<h2>Bedrock — our pipe, our rules</h2>
+<ul>
+  <li>The model endpoint lives in <b>your AWS account</b>: your request path, your VPC, your IAM, your gateway in front.</li>
+  <li>Guardrails are resources you create and <b>attach per call</b> — not something built into the pipe:
+    <ul>
+      <li>Managed via API: <code>CreateGuardrail</code> / <code>UpdateGuardrail</code>, versioned, Terraform-able.</li>
+      <li>Applied on <code>InvokeModel</code>/<code>Converse</code>, or evaluated standalone with <code>ApplyGuardrail</code>.</li>
+      <li>Enforce = block action · Inform = detect-only · Off = don't attach the guardrail.</li>
+      <li><b>No guardrails at all is a valid configuration</b> — the option claude.ai never offers its users.</li>
+    </ul>
+  </li>
+  <li>Who can flip the dial is plain IAM — no single console Owner, fully automatable.</li>
+  <li>With Kong AI Gateway Enterprise, enforcement sits at the gateway: the <a href="https://developer.konghq.com/plugins/ai-aws-guardrails">AI AWS Guardrails plugin</a> applies a Bedrock guardrail to requests and responses (guardrail ID + version + region, IAM-role auth from 3.12 — <a href="https://developer.konghq.com/ai-gateway/v1/how-to/use-ai-aws-guardrails-plugin/">how-to</a>). Enforce/inform/off becomes a decK diff or a Konnect API call.</li>
+</ul>
+
+<h2>Where the check can live — and why you'd put it there</h2>
+<p>A prompt travels <em>app → gateway → provider → model</em>. A guardrail can be bolted on at any of those hops, and the placement decides what it can see, who can bypass it, and who pays the latency:</p>
+<ul>
+  <li><b>In the application</b> (SDK call, e.g. <code>ApplyGuardrail</code> from code) —
+    <em>why here:</em> most context (the app knows the user, the feature, the tenant), so the finest-grained decisions.
+    <em>why not:</em> every team must implement and update it; one forgetful service = a hole. Policy drifts across codebases.</li>
+  <li><b>At the gateway</b> (Kong plugin) —
+    <em>why here:</em> one choke point every app already passes through, so policy is inherited with zero code changes, owned by one team, versioned as config.
+    <em>why not:</em> it only sees traffic that actually goes through it — a workload calling Bedrock directly around Kong is invisible to it.</li>
+  <li><b>At the provider, attached to the call</b> (<code>guardrailIdentifier</code> on <code>InvokeModel</code>/<code>Converse</code>) —
+    <em>why here:</em> the check rides with the request itself, gateway or not. And IAM can make it <b>mandatory</b>: a policy condition on the guardrail identifier can deny any model call that doesn't attach it, closing the "bypass the gateway" hole.
+    <em>why not:</em> still your caller's responsibility to wire, and the IAM trick needs discipline in account design.</li>
+  <li><b>Inside the provider's pipeline, before the model</b> (inference hooks) —
+    <em>why here:</em> the only placement that covers surfaces you don't proxy at all — employees typing into claude.ai or Claude Code. Nobody can route around it, because the pipe isn't yours to route around.
+    <em>why not:</em> precisely for the same reason, the ceiling isn't yours either: console-only, Owner role, no API.</li>
+</ul>
+<p>Rule of thumb for the class: <b>the further from the app you check, the broader the coverage and the weaker the context</b> — and the question "can someone bypass it?" is answered by who owns the hop, not by the tool.</p>
+
+<h2>Kong side — the AI AWS Guardrails plugin</h2>
+
+<p><b>What it is.</b></p>
+<ul>
+  <li>A Kong Enterprise plugin (<code>ai-aws-guardrails</code>, Gateway ≥ 3.11, AI Gateway Enterprise license) that sits on the same route as AI Proxy / AI Proxy Advanced and <b>applies a Bedrock guardrail to the traffic passing through the gateway</b>.</li>
+  <li>It separates two things that are often confused: the <em>policy</em> (the guardrail — content filters, denied topics, PII rules — a versioned resource living in your AWS account) and the <em>enforcement point</em> (Kong, where every request already flows).</li>
+</ul>
+
+<p><b>How it does it.</b></p>
+<ul>
+  <li>On each request, the plugin extracts the prompt text from the body (<code>text_source</code>: just the user messages, or the whole exchange), sends it to the Bedrock Guardrails service in your region, and gets a verdict back — before the model is ever called.</li>
+  <li>With <code>guarding_mode: OUTPUT</code> or <code>BOTH</code>, it does the same to the model's response on the way back out.</li>
+  <li>Streaming responses can't be checked token by token economically, so it buffers <code>response_buffer_size</code> tokens and checks per chunk — smaller buffer = faster blocking, more guardrail calls (and cost).</li>
+  <li>On a violation, Kong answers the client with a policy-violation error itself; for input violations the upstream model is never reached, so nothing sensitive leaves and no tokens are paid for.</li>
+  <li>Auth to AWS is IAM: a role the data plane assumes (<code>aws_assume_role_arn</code>, 3.12+) or static keys. <code>log_blocked_content</code> (3.14+) records what was blocked for audit.</li>
+</ul>
+
+<p><b>Why it's built this way.</b></p>
+<ul>
+  <li><b>Why at the gateway:</b> every app behind Kong inherits the policy with zero code changes — one team owns it, no SDK to update in ten services, no app can "forget" to apply it.</li>
+  <li><b>Why the policy lives in AWS, not in Kong:</b> guardrails are versioned, auditable AWS resources (<code>CreateGuardrail</code>/<code>UpdateGuardrail</code>, Terraform-able), evaluated by AWS's own classifiers — Kong doesn't reimplement content analysis, it just decides <em>where</em> the check happens.</li>
+  <li><b>Why check input before proxying:</b> blocking at the gate means the sensitive prompt never reaches the model provider at all — cheaper (no tokens) and stronger (no data egress), the same "check at the source" idea inference hooks apply on Anthropic's side.</li>
+</ul>
+
+<p><b>The config</b> — the guardrail is created in AWS first (<code>aws bedrock create-guardrail</code>), which returns the ID and version the plugin needs; then both plugins go in via decK (<a href="https://developer.konghq.com/ai-gateway/v1/how-to/use-ai-aws-guardrails-plugin/">Kong how-to</a>):</p>
+<pre><code>_format_version: "3.0"
+plugins:
+  # 1. Route the traffic to the model
+  - name: ai-proxy-advanced
+    config:
+      targets:
+        - route_type: llm/v1/chat
+          model:
+            provider: bedrock          # or openai/anthropic/etc.
+            name: anthropic.claude-sonnet-4-5
+            options:
+              bedrock:
+                aws_region: "${{ env "DECK_AWS_REGION" }}"
+
+  # 2. Attach the Bedrock guardrail to that traffic
+  - name: ai-aws-guardrails
+    config:
+      guardrails_id: "${{ env "DECK_GUARDRAILS_ID" }}"        # from create-guardrail
+      guardrails_version: "${{ env "DECK_GUARDRAILS_VERSION" }}"  # e.g. DRAFT or "1"
+      aws_region: "${{ env "DECK_AWS_REGION" }}"
+      aws_assume_role_arn: "${{ env "DECK_GUARDRAILS_ROLE_ARN" }}"  # IAM role (3.12+); or aws_access_key_id/aws_secret_access_key
+      guarding_mode: BOTH              # INPUT | OUTPUT | BOTH (default: input only)
+      text_source: concatenate_all_content   # or concatenate_user_content
+      response_buffer_size: 50         # tokens buffered before checking, streaming
+      log_blocked_content: true        # 3.14+: log what was blocked, for audit</code></pre>
+<ul>
+  <li><b>Enforce / inform / off on this surface — all config pushes, no console, and here's why each works:</b>
+    <ul>
+      <li><b>Enforce</b> — plugin enabled, guardrail filters set to block: the gateway answers the violation itself, the model is never called.</li>
+      <li><b>Inform</b> — keep the plugin on, flip the guardrail's filters to detect-only in AWS (<code>UpdateGuardrail</code>): the same evaluation runs and is logged/traced, but the verdict carries no block action — identical to inference hooks' Shadow mode, just controlled by API instead of a console human.</li>
+      <li><b>Off</b> — <code>enabled: false</code> on the plugin (one decK diff or Konnect API PATCH): the guardrail call disappears from the request path entirely — zero added latency, zero guardrail cost.</li>
+    </ul>
+  </li>
+  <li><b>Why versions matter for rollout:</b> point <code>guardrails_version</code> at <code>DRAFT</code> while tuning, pin a published number for prod. Enforcement rollback becomes changing one string in config — reviewable, diffable, instant.</li>
+</ul>
+
+<div class="key">
+  <b>The one-sentence takeaway:</b> Inference hooks inspect at the <em>source</em>, before the prompt reaches the model, inside Anthropic's pipeline — so the ceiling is held by a human in their console and you only control what happens below it. On Bedrock the pipeline is yours, so control is total and API-driven — including the choice to have no guardrails at all.
+</div>
+
+<h2>Which one do you need?</h2>
+<ul>
+  <li>Employees using Claude apps → inference hooks. Compliance owner holds the console ceiling; engineering holds the verdict server below it.</li>
+  <li>Your products calling Claude on Bedrock → Bedrock Guardrails through the gateway, config-as-code end to end.</li>
+  <li>A company with both kinds of traffic needs <b>both</b> — one does not cover the other.</li>
+</ul>
+
+<footer>Docs: <a href="https://platform.claude.com/docs/en/manage-claude/inference-hooks">hooks overview</a> ·
+<a href="https://platform.claude.com/docs/en/manage-claude/inference-hooks-configuration">configure</a> ·
+<a href="https://platform.claude.com/docs/en/manage-claude/inference-hooks-endpoint">build the endpoint</a> ·
+<a href="https://developer.konghq.com/plugins/ai-aws-guardrails">Kong AI AWS Guardrails</a></footer>
+
+</body>
+</html>

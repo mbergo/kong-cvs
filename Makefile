@@ -7,7 +7,7 @@ SUDO ?= sudo
 DOCKER := $(SUDO) docker
 
 .DEFAULT_GOAL := help
-.PHONY: help up down restart status logs check clean-stale metrics prometheus-plugin alloy-up alloy-down alloy-logs traffic traffic-stop traffic-logs cloud cloud-diff dashboards
+.PHONY: help up down restart status logs check clean-stale metrics prometheus-plugin alloy-up alloy-down alloy-logs traffic traffic-stop traffic-logs cloud cloud-diff dashboards hook-server hook-entities
 
 help: ## List targets
 	@grep -hE '^[a-z-]+:.*## ' Makefile | awk -F':.*## ' '{printf "  make %-12s %s\n", $$1, $$2}'
@@ -72,3 +72,9 @@ cloud-diff: ## Show what decK would change in Kong Cloud
 
 dashboards: ## Step 12: publish dashboards to Grafana (+7424) and print the public link
 	scripts/12-dashboards.sh
+
+hook-server: ## Step 13: run the Claude Inference hooks verdict server (:8200)
+	@set -a && . secrets/hook.env && set +a && python3 scripts/13-hook-server.py
+
+hook-entities: ## Step 14: create the Kong route/plugins for the Inference hooks endpoint
+	scripts/14-hook-entities.sh
