@@ -43,7 +43,8 @@ Settings: `config.env`. Secrets: `secrets/` (gitignored, never committed).
   (Grafana Cloud → Connections → Hosted Prometheus metrics → single instance → Directly →
   Create token, scope `set:alloy-data-write`; copy url/username/password from the generated config).
 - Runs `grafana/alloy` on the host network, scraping `127.0.0.1:8100/metrics` every 15s (`alloy/config.alloy`).
-- Check: `curl -s 127.0.0.1:12345/metrics | grep remote_storage_samples` (failed_total must be 0);
+- Check: `curl -s 127.0.0.1:12346/metrics | grep remote_storage_samples` (failed_total must be 0;
+  port moved 12345→12346, the default clashes with guardrail-observer's Alloy on this host);
   in Grafana Explore, query `kong_control_plane_connected`.
 
 ### 04 — Dashboard (next)
@@ -166,20 +167,30 @@ Failure handling (fail-open or fail-closed) and counts toward Anthropic's circui
 
 Config: `secrets/hook.env` (gitignored) with `HOOK_SIGNING_SECRET=whsec_…` (shown ONCE in
 claude.ai, step 15), `HOOK_MODE=alert`, `HOOK_PORT=8200`, plus `HOOK_UPSTREAM_URL`,
-`HOOK_ROUTE_PATH=/claude-hook`, `HOOK_KEY=<random>` for step 14.
+`HOOK_ROUTE_PATH=/claude-hook`, `HOOK_KEY=<random>` for step 14. `HOOK_MODE` and the secret
+are read at startup — restart the server to apply a change. Without a secret the server
+refuses to start (`HOOK_ALLOW_UNSIGNED=1` overrides, local tests only).
 Demo policy = 3 regexes in the script; swap for the real engine (Fiddler, etc.).
 Check: `curl -s localhost:8200` → `{"status":"ok","mode":"alert"}`.
 
 ### 14 — Claude Inference hooks: Kong route + plugins (2026-11-02)
 `make hook-entities` (= `scripts/14-hook-entities.sh`), Konnect API, idempotent.
 
-- Service `claude-hook` → `HOOK_UPSTREAM_URL`, timeouts 1000/3000/3000ms, retries 1
+- Prereq: the AWS front door (Route53 + ALB + ACM cert + the deployed verdict server) is
+  existing infrastructure — this script only wires Kong; it creates nothing in AWS.
+- Service `claude-hook` → `HOOK_UPSTREAM_URL`, timeouts 1000/3000/3000ms, retries 0
   (everything must fit in Claude's verdict budget, default 5000ms for the WHOLE exchange
-  incl. TLS handshake; Anthropic retries once only on connection failure).
+  incl. TLS handshake; a Kong retry would stack another timeout on top, and Anthropic
+  already retries once on connection failure).
 - Route `/claude-hook` (strip_path), plugins scoped to it:
   `ip-restriction` allow `160.79.106.0/24` (Anthropic egress; defense in depth, the HMAC
   check in the server is the real authentication) and `key-auth` on header `x-hook-key`
   (consumer `anthropic`; same value configured in claude.ai as a custom request header).
+  Rerunning the script after changing `HOOK_KEY` rotates the credential: old keys are revoked.
+- Real IP behind the ALB: Kong sees the ALB's address, so `ip-restriction` would 403
+  everything. Set on the DP: `KONG_TRUSTED_IPS=<VPC CIDR>`, `KONG_REAL_IP_HEADER=X-Forwarded-For`,
+  `KONG_REAL_IP_RECURSIVE=on` — or use an NLB (TCP passthrough preserves the source IP,
+  TLS then terminates on Kong with a public-CA cert).
 - AWS front door requirements (hard, from Anthropic): `https://` on port 443, public IPv4,
   cert from a public CA (ACM on the ALB), **no redirects** (the configured URL answers
   directly), no ngrok/tunnels (blocked — step 05's ngrok does NOT work here). Transcripts

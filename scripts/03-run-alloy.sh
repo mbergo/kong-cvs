@@ -13,9 +13,10 @@ docker run -d --name "$GRAFANA_ALLOY_CONTAINER_NAME" --restart unless-stopped \
   -e "KONG_TARGET=127.0.0.1:$KONG_STATUS_PORT" \
   -v "$PWD/alloy/config.alloy:/etc/alloy/config.alloy:ro" \
   "$GRAFANA_ALLOY_IMAGE" \
-  run /etc/alloy/config.alloy --server.http.listen-addr=127.0.0.1:12345 --storage.path=/var/lib/alloy/data
+  run /etc/alloy/config.alloy --server.http.listen-addr=127.0.0.1:12346 --storage.path=/var/lib/alloy/data
+# 12346: the default 12345 is taken by guardrail-observer-alloy-1 on this host.
 
 echo "waiting for first remote_write..."
 sleep 20
 docker logs "$GRAFANA_ALLOY_CONTAINER_NAME" 2>&1 | grep -iE 'error|401|403' | tail -5 || true
-echo "alloy UI: http://127.0.0.1:12345 (check prometheus.remote_write.grafana_cloud health)"
+echo "alloy UI: http://127.0.0.1:12346 (check prometheus.remote_write.grafana_cloud health)"

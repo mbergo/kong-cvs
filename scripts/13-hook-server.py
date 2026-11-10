@@ -17,19 +17,29 @@
 # - Verify HMAC over the RAW body bytes; decode the secret with STANDARD base64.
 # - Bodies can be large (up to 64 MiB); drain them even when rejecting.
 import base64
+import collections
 import hashlib
 import hmac
 import json
 import os
 import re
 import sys
+import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 SECRET = os.environ.get("HOOK_SIGNING_SECRET", "")
 MODE = os.environ.get("HOOK_MODE", "alert").lower()
 PORT = int(os.environ.get("HOOK_PORT", "8200"))
+ALLOW_UNSIGNED = os.environ.get("HOOK_ALLOW_UNSIGNED", "") == "1"  # local tests only
 TOLERANCE_SECONDS = 300
+MAX_BODY = 64 * 1024 * 1024  # Anthropic sends up to 64 MiB; anything larger isn't them
+
+# Connection-failure retries reuse the same webhook-id: answer them with the same
+# verdict instead of logging the event twice.
+SEEN_LOCK = threading.Lock()
+SEEN = collections.OrderedDict()  # webhook-id -> verdict bytes
+SEEN_MAX = 4096
 
 # Demo policy: things that must never leave for the model. Replace with the real engine.
 POLICY = [
@@ -65,7 +75,15 @@ def verify(headers, body: bytes) -> bool:
 def transcript_text(frame: dict) -> str:
     parts = []
     for message in frame.get("messages", []):
-        for block in message.get("content", []):
+        if not isinstance(message, dict):
+            continue
+        content = message.get("content", [])
+        if isinstance(content, str):  # tolerate string-form content
+            parts.append(content)
+            continue
+        for block in content if isinstance(content, list) else []:
+            if not isinstance(block, dict):
+                continue
             for field in ("text", "content"):
                 value = block.get(field)
                 if isinstance(value, str):
@@ -109,20 +127,40 @@ def log(kind, frame, label="", reference=""):
 
 class VerdictHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"  # keep the connection open between verdicts
+    timeout = 30  # drop stalled connections instead of pinning a thread
 
     def do_POST(self):
-        body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+        length = int(self.headers.get("Content-Length", 0))
+        if length > MAX_BODY:
+            self.answer(413, b'{"error": "body too large"}')
+            return
+        body = self.rfile.read(length)
         if SECRET and not verify(self.headers, body):
             # Bad signature: genuinely not Anthropic, so a 401 (webhook failure) is right.
             self.answer(401, b'{"error": "bad signature"}')
             return
+        webhook_id = self.headers.get("webhook-id")
+        if webhook_id:
+            with SEEN_LOCK:
+                cached = SEEN.get(webhook_id)
+            if cached is not None:
+                self.answer(200, cached)
+                return
         try:
             frame = json.loads(body)
         except ValueError:
             frame = {}
+        if not isinstance(frame, dict):
+            frame = {}
         verdict = decide(frame)
         log("verdict:" + verdict["action"], frame)
-        self.answer(200, json.dumps(verdict).encode())
+        payload = json.dumps(verdict).encode()
+        if webhook_id:
+            with SEEN_LOCK:
+                SEEN[webhook_id] = payload
+                while len(SEEN) > SEEN_MAX:
+                    SEEN.popitem(last=False)
+        self.answer(200, payload)
 
     def do_GET(self):  # health check for the Kong upstream / ALB target group
         self.answer(200, b'{"status": "ok", "mode": "' + MODE.encode() + b'"}')
@@ -141,8 +179,10 @@ class VerdictHandler(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     if MODE not in ("enforce", "alert", "off"):
         sys.exit(f"HOOK_MODE must be enforce|alert|off, got {MODE!r}")
+    if not SECRET and not ALLOW_UNSIGNED:
+        sys.exit("HOOK_SIGNING_SECRET is empty. Set it, or HOOK_ALLOW_UNSIGNED=1 for local tests.")
     if not SECRET:
-        print("WARNING: HOOK_SIGNING_SECRET empty - accepting unsigned requests (test only)",
+        print("WARNING: accepting unsigned requests (HOOK_ALLOW_UNSIGNED=1, test only)",
               file=sys.stderr)
     print(f"verdict server on :{PORT}, mode={MODE}", file=sys.stderr)
     ThreadingHTTPServer(("", PORT), VerdictHandler).serve_forever()

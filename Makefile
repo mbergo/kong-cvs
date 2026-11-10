@@ -74,7 +74,7 @@ dashboards: ## Step 12: publish dashboards to Grafana (+7424) and print the publ
 	scripts/12-dashboards.sh
 
 hook-server: ## Step 13: run the Claude Inference hooks verdict server (:8200)
-	@set -a; . secrets/hook.env; set +a; python3 scripts/13-hook-server.py
+	@set -a && . secrets/hook.env && set +a && python3 scripts/13-hook-server.py
 
 hook-entities: ## Step 14: create the Kong route/plugins for the Inference hooks endpoint
 	scripts/14-hook-entities.sh

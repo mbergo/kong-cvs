@@ -14,7 +14,7 @@ source config.env
 source secrets/konnect.env
 source secrets/hook.env
 
-api() { curl -fsS -H "Authorization: Bearer $KONNECT_TOKEN" -H 'Content-Type: application/json' "$@"; }
+api() { curl -fsS --connect-timeout 5 --max-time 30 -H "Authorization: Bearer $KONNECT_TOKEN" -H 'Content-Type: application/json' "$@"; }
 
 cp_id=$(api "$KONNECT_API/v2/control-planes?page%5Bsize%5D=100" \
   | jq -r --arg h "$KONNECT_CP_HOST" '.data[] | select(.config.control_plane_endpoint | contains($h)) | .id' | head -1)
@@ -35,8 +35,10 @@ upsert() {
 }
 
 # Service: short timeouts so the whole exchange stays inside Claude's 5000ms verdict budget.
+# retries:0 — a Kong retry would stack another full timeout on top and blow the budget;
+# Anthropic itself retries once on connection failure.
 svc_body=$(jq -n --arg url "$HOOK_UPSTREAM_URL" '{name:"claude-hook", url:$url,
-  connect_timeout:1000, read_timeout:3000, write_timeout:3000, retries:1}')
+  connect_timeout:1000, read_timeout:3000, write_timeout:3000, retries:0}')
 svc_id=$(upsert services claude-hook "$svc_body")
 
 route_body=$(jq -n --arg p "$HOOK_ROUTE_PATH" --arg s "$svc_id" \
@@ -46,6 +48,9 @@ route_id=$(upsert routes claude-hook "$route_body")
 
 # Plugin: only Anthropic's egress range may reach the route (not a substitute for the
 # HMAC check in the verdict server; the range carries other Anthropic egress too).
+# Behind an ALB, Kong sees the ALB's address: the DP must trust it and use the forwarded
+# client IP (KONG_TRUSTED_IPS=<VPC CIDR>, KONG_REAL_IP_HEADER=X-Forwarded-For,
+# KONG_REAL_IP_RECURSIVE=on), or use an NLB, which preserves the source IP.
 plug() {  # plug <plugin-name> <config-json>
   local name=$1 config=$2 id body
   body=$(jq -n --arg n "$name" --arg r "$route_id" --argjson c "$config" \
@@ -72,5 +77,12 @@ if ! api "$base/consumers/$consumer_id/key-auth?size=100" | jq -e --arg k "$HOOK
   api -X POST "$base/consumers/$consumer_id/key-auth" -d "$(jq -n --arg k "$HOOK_KEY" '{key:$k}')" >/dev/null
   echo "key-auth credential set for anthropic"
 fi
+# Key rotation: once the current key exists, revoke any older credentials so a retired
+# key stops being accepted.
+for old_id in $(api "$base/consumers/$consumer_id/key-auth?size=100" \
+  | jq -r --arg k "$HOOK_KEY" '.data[] | select(.key!=$k) | .id'); do
+  api -X DELETE "$base/consumers/$consumer_id/key-auth/$old_id"
+  echo "revoked superseded key-auth credential ($old_id)"
+done
 
 echo "done: route $HOOK_ROUTE_PATH -> $HOOK_UPSTREAM_URL (ip-restriction + key-auth)"
